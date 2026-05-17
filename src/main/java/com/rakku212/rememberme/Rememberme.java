@@ -3,9 +3,8 @@ package com.rakku212.rememberme;
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.plugin.Plugin;
-import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
-import com.velocitypowered.api.event.connection.LoginEvent;
+import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -38,7 +37,7 @@ public class Rememberme {
         }
     }
 
-    @Subscribe(order = PostOrder.LAST)
+    @Subscribe
     public void onDisconnect(DisconnectEvent event) {
         Player player = event.getPlayer();
         player.getCurrentServer().ifPresent(registeredServer -> {
@@ -56,23 +55,21 @@ public class Rememberme {
 
 
     @Subscribe
-    public void onLogin(LoginEvent event) {
+    public void onChooseInitialServer(PlayerChooseInitialServerEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
         Path playerFile = dataDirectory.resolve(uuid + ".txt");
 
-        server.getScheduler().buildTask(this, () -> {
-            try {
-                if (Files.exists(playerFile)) {
-                    String lastServerName = Files.readString(playerFile);
-                    if (!lastServerName.equals("lobby")) {
-                        server.getServer(lastServerName).ifPresent(server -> {
-                            event.getPlayer().createConnectionRequest(server).connect();
-                        });
-                    }
-                }
-            } catch (IOException e) {
-                logger.error("Failed to fetch player data", e);
+        try {
+            if (!Files.exists(playerFile)) {
+                return;
             }
-        }).schedule();
+            String lastServerName = Files.readString(playerFile).trim();
+            if (lastServerName.isEmpty() || lastServerName.equals("lobby")) {
+                return;
+            }
+            server.getServer(lastServerName).ifPresent(event::setInitialServer);
+        } catch (IOException e) {
+            logger.error("Failed to fetch player data", e);
+        }
     }
 }
